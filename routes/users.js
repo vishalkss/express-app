@@ -210,8 +210,6 @@ router.post('/upload-data', upload.single('file'), function (req, res) {
 
           });
 
-          console.log("maxMinAvgObj", maxMinAvgObj);
-
           resultData['Total sales of the store'] = totalSales
           resultData['Month wise sales totals'] = monthWiseData;
           resultData['Most popular item'] = mpiem;
