@@ -69,34 +69,160 @@ router.get("/search-user", async (req, res, next) => {
 
 
 router.post('/upload-data', upload.single('file'), function (req, res) {
-  // req.file is the name of your file in the form above, here 'uploaded_file'
-  // req.body will hold the text fields, if there were any 
-  console.log(req.file, req.body)
-  if (req.file){
-    var tmp_path = req.file.path;
 
-    /** The original name of the uploaded file
-        stored in the variable "originalname". **/
-    var target_path = 'templates/' + req.file.originalname;
-
-    /** A better way to copy the uploaded file. **/
-    var src = fs.createReadStream(tmp_path);
-    var dest = fs.createWriteStream(target_path);
+  if (req.file) {
     var parse = require('csv-parse');
 
     var csvData = [];
+    var resultData = {};
     fs.createReadStream(req.file.path)
       .pipe(parse({ delimiter: ',' }))
       .on('data', function (csvrow) {
-        console.log(csvrow);
-        //do something with csvrow
         csvData.push(csvrow);
       })
       .on('end', function () {
-        //do something with csvData
-        console.log(csvData);
-        res.send(csvData);
+        if (csvData && csvData.length > 0) {
+          var headers = [];
+          var userData = [];
+          var totalSales = 0;
+          csvData[0].forEach(element => {
+            headers.push(element);
+          });
+
+
+          let monthWiseData = {};
+          let monthWisePopularItem = {};
+          let monthWiseItemRev = {};
+          let maxMinAvg = {};
+
+          csvData.forEach((element, index) => {
+            let user = {};
+            if (index > 0) {
+
+
+              // Total sales of the store
+              if (headers[4] == "Total Price") {
+                totalSales = totalSales + parseInt(element[4]);
+              }
+
+              // Month wise sales totals
+              if (headers[0] == "Date") {
+                let date = element[0];
+                let res = date.split('-');
+                let tempDate = res[0] + "-" + res[1];
+                if (monthWiseData[tempDate]) {
+                  monthWiseData[tempDate] = monthWiseData[tempDate] + parseInt(element[4]);
+                } else {
+                  monthWiseData[tempDate] = parseInt(element[4]);
+                }
+              }
+
+              // Most popular item (most quantity sold) in each month
+              if (headers[1] == "SKU") {
+                let date = element[0];
+                let res = date.split('-');
+                let tempDate = res[0] + "-" + res[1];
+                let tempItem = element[1];
+                let item_name = tempItem + ":-" + tempDate;
+
+                if (monthWisePopularItem[item_name]) {
+                  monthWisePopularItem[item_name] = monthWisePopularItem[item_name] + parseInt(element[3]);
+                } else {
+                  monthWisePopularItem[item_name] = parseInt(element[3]);
+                }
+
+                if (monthWiseItemRev[item_name]) {
+                  monthWiseItemRev[item_name] = monthWiseItemRev[item_name] + parseInt(element[4]);
+                } else {
+                  monthWiseItemRev[item_name] = parseInt(element[4]);
+                }
+
+                if (maxMinAvg[item_name]) {
+                  maxMinAvg[item_name] = maxMinAvg[item_name] + "," + element[3];
+                } else {
+                  maxMinAvg[item_name] = element[3];
+                }
+              }
+
+              headers.forEach((headerData, key) => {
+                user[headerData] = element[key];
+              });
+            }
+            userData.push(user);
+          });
+
+          let monthWisePopularItemData = {};
+          let mwpid = {};
+          Object.keys(monthWisePopularItem).forEach(function (keys) {
+            element = keys.split(":-");
+            if (monthWisePopularItemData[element[1]] && (monthWisePopularItemData[element[1]] < monthWisePopularItem[keys])) {
+              monthWisePopularItemData[element[1]] = monthWisePopularItem[keys];
+              mwpid[element[1]] = element[0];
+            } else if (!monthWisePopularItemData[element[1]]) {
+              monthWisePopularItemData[element[1]] = monthWisePopularItem[keys];
+              mwpid[element[1]] = element[0];
+            }
+
+          });
+          let mpiem = [];
+          mpiem['Most popular item Each Month'] = mwpid;
+          mpiem['Most popular item Quantity sold'] = monthWisePopularItemData;
+
+
+          let monthWiseItemRevData = {};
+          let mwird = {};
+          Object.keys(monthWiseItemRev).forEach(function (keys) {
+            element = keys.split(":-");
+            if (monthWiseItemRevData[element[1]] && (monthWiseItemRevData[element[1]] < monthWiseItemRev[keys])) {
+              monthWiseItemRevData[element[1]] = monthWiseItemRev[keys];
+              mwird[element[1]] = element[0];
+            } else if (!monthWiseItemRevData[element[1]]) {
+              monthWiseItemRevData[element[1]] = monthWiseItemRev[keys];
+              mwird[element[1]] = element[0];
+            }
+
+          });
+
+          let mwirdFinal = [];
+          mwirdFinal['Items generating most revenue Name'] = mwird;
+          mwirdFinal['Items generating most revenue '] = monthWiseItemRevData;
+
+
+          let maxMinAvgObj = {};
+          Object.keys(maxMinAvg).forEach(function (keys) {
+            element = keys.split(":-");
+            if (element[0] == mwpid[element[1]]) {
+              let tempQuant = maxMinAvg[keys].split(",");
+              let min = Math.min(...tempQuant);
+              let max = Math.max(...tempQuant);
+              let sum = 0;
+              for (let i = 0; i < tempQuant.length; i++) {
+                sum += parseInt(tempQuant[i], 10);
+              }
+              let avg = sum / tempQuant.length;
+              let arr = []
+              arr['item'] = element[0];
+              arr['min'] = min;
+              arr['max'] = max;
+              arr['avg'] = avg;
+              maxMinAvgObj[element[1]] = arr;
+            };
+
+          });
+
+          console.log("maxMinAvgObj", maxMinAvgObj);
+
+          resultData['Total sales of the store'] = totalSales
+          resultData['Month wise sales totals'] = monthWiseData;
+          resultData['Most popular item'] = mpiem;
+          resultData['Items generating most revenue in each month'] = mwirdFinal;
+          resultData['Min, max & average number of orders each month For the most popular item'] = mwirdFinal;
+        }
+
+        res.send(resultData);
       });
+  } else {
+    res.status(500).json({ error: 'Please add a file' })
   }
 });
 module.exports = router;
